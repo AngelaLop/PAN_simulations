@@ -14,7 +14,8 @@
 	global output "$path\Covid\microsimulations\results"
 	global data_m "$path\Covid\microsimulations\inputs\excel"
 
-
+	
+	
 /*===============================================================================================
                                   0. Program set up
 ===============================================================================================*/
@@ -57,12 +58,12 @@ tempfile g_pop g_pcons
 	
 
 	
-	use  "${path}\data\datalibweb\pan_2019_eh_v01_m_v01_a_sedlac-03_all", clear
+	use  "C:\Users\WB585318\OneDrive - Universidad de los Andes\WB\Panama\data\datalibweb\pan_2019_eh_v01_m_v01_a_sedlac-03_all", clear
 	duplicates report id com /*is id*/
 	
 	
 	gen country="pan"
-	cap keep if hogarsec ==0
+	*cap keep if hogarsec ==0
 	cap drop _merge factor_aj 
 	
 		*----------------Population INEC projections
@@ -233,7 +234,23 @@ tempfile g_pop g_pcons
 	
 	tab ipcf_Q5	[w=pondera], miss
 	
+		*Poverty Lines
+	cap drop lp_190usd_ppp lp_320usd_ppp lp_550usd_ppp lp_1300usd_ppp 
+	cap drop lp_1000usd_ppp 
+		
+	local days = 365/12		// Ave days in a month
+	*local pls 550 785
+	local pls 190 320 550 1300 
+		
+	foreach pl of local pls {
+	local pl_dollars = `pl'/100
+	cap gen double lp_`pl'_ppp = `pl_dollars'*(`days')
+	}		
+	
 
+
+	
+	apoverty ipcf_ppp11 [w=pondera] , varpl(lp_550_ppp) gen(poor_550ppp1) /*this is the one published in WDI.. */
 		
 	*Age:
 		
@@ -242,7 +259,10 @@ tempfile g_pop g_pcons
 		
 
 // Indigenous
+	tab p4d_indige [w=pondera]
+	tab indi_rec [w=pondera]
 
+	tab p4d_indige indi_rec [w=pondera]
 	destring p4d_indige, gen(p4d_indige_n)
 
 	gen indig = (p4d_indige_n!=11)
@@ -250,7 +270,7 @@ tempfile g_pop g_pcons
 	
 
 // Afro-decendants
-
+	tab p4f_afrod [w=pondera]
 
 	destring p4f_afrod, gen(p4f_afrod_n)
 
@@ -272,7 +292,7 @@ tempfile g_pop g_pcons
 	
 	gen ben_main_cct = 0
 	replace ben_main_cct = 1 if red == 1 | pen12065 == 1 | angel == 1
-
+	tab ben_main_cct [w=pondera]
 	
 	egen hh_main_cct = max(ben_main_cct), by(id) /*household benefits from main cash transfers*/
 	
@@ -291,7 +311,25 @@ tempfile g_pop g_pcons
 
 	destring ocup_2d_str, gen(ocup_2d)
 
-	
+*   vulnerability 
+
+* education level 
+g vul_edu = (edad>=18 & edad<=30) & e_primaria==1
+replace vul_edu =1 if (edad>=31 & edad<=59) & inlist(nivel,0,1)
+replace vul_edu =1 if edad>=60 & alfabeto==0
+
+egen hh_vul_edu = max(vul_edu), by(id)
+
+gen cony = relacion==2
+egen hh_cony = max(cony), by(id)
+
+g vul_jefe = jefe==1 & mujer==1
+replace vul_jefe = 1 if jefe==1 & hh_cony ==0 & nro_hijos>0
+replace vul_jefe = 0 if nro_hijos==0
+egen hh_vul_jefe = max(vul_jefe), by(id)
+
+gen vulnerable =0 
+replace vulnerable =1 if (hh_vul_edu==1 |  hh_vul_jefe==1)
 	
 *-----------------------1 Affected population  ----------------------------------
 * 2020 based on 2019	
@@ -375,10 +413,7 @@ predict ocupa_Fx if pea ==1,  asif
 		gsort shock_3 -ocupa_Fx 
 
 		*100% loss for  employment 
-		cap gen people_active_19 = pondera if pea == 1 
-		cap gen people_active_20 = pondera_20 if pea == 1 
-		cap gen people_active_21 = pondera_21 if pea == 1 
-		cap gen people_active_22 = pondera_22 if pea == 1 
+		cap gen people_active_ = pondera if pea == 1 
 		
 		sum pondera if pea == 1
 		local  people_pea = r(sum)
@@ -395,19 +430,17 @@ predict ocupa_Fx if pea ==1,  asif
 			* tasas de ocupacion por rama y sexo (ocupados/pea)
 			*sexo y rama
 		
-	gen employed20_aux = sum(people_active_20) if hombre==1 & rama_s ==1 & pea==1  // Agricultura 2020
-	gen employed21_aux = sum(people_active_21) if hombre==1 & rama_s ==1 & pea==1  // Agricultura 2021
-	gen employed22_aux = sum(people_active_22) if hombre==1 & rama_s ==1 & pea==1  // Agricultura 2022
+	gen employed20_aux = sum(people_active_) if hombre==1 & rama_s ==1 & pea==1  // Agricultura 2020
 	
 		local sexs hombre mujer 
 		local ramas agricultura industria comercio servicios 
-		local anos 20 21 22
+		local anos 20 
 	
 		
 		foreach sex of local sexs {
 			foreach rama of local ramas {
 				foreach ano of local anos{
-				replace employed`ano'_aux = sum(people_active_`ano') if `sex'==1 & `rama' ==1 & pea==1 
+				replace employed`ano'_aux = sum(people_active_) if `sex'==1 & `rama' ==1 & pea==1 
 				}
 			}
 		}
@@ -424,8 +457,9 @@ predict ocupa_Fx if pea ==1,  asif
 			replace employed20_1 = (employed20_aux<=78183) if hombre==0 & rama_s ==2 & pea==1 // Industria
 			replace employed20_1 = (employed20_aux<=131463) if hombre==0 & rama_s ==3 & pea==1 // Comercio
 			replace employed20_1 = (employed20_aux<=413151) if hombre==0 & rama_s ==4 & pea==1 // Servicios
+
 			
-		
+				
 			*2021 // aumento de la TO 5.5pp (HFS2021) representa aumento de los ocupados en 10.7%  
 			
 			*gen employed21 = (ocupa_prct>=0.8265) if pea==1
@@ -443,35 +477,62 @@ predict ocupa_Fx if pea ==1,  asif
 			replace employed21 = (employed20_aux<=86086)  if hombre==0 & rama_s ==2 & pea==1 // Industria
 			replace employed21 = (employed20_aux<=144902) if hombre==0 & rama_s ==3 & pea==1 // Comercio
 			replace employed21 = (employed20_aux<=456928) if hombre==0 & rama_s ==4 & pea==1 // Servicios
-	
+		
+					* alternative scenario - 154000 reactivated jobs acording to MEP  (https://www.laestrella.com.pa/opinion/columnistas/210706/panama-panorama-laboral-2021)
+			
+		*hombres 
+				gen employed21_1 = (employed20_aux<=195814) if hombre==1 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed21_1 = (employed20_aux<=245372) if hombre==1 & rama_s ==2 & pea==1 // Industria
+			replace employed21_1 = (employed20_aux<=159706) if hombre==1 & rama_s ==3 & pea==1 // Comercio
+			replace employed21_1 = (employed20_aux<=452546) if hombre==1 & rama_s ==4 & pea==1 // Servicios		
+			
+		*mujeres 
+			replace employed21_1 = (employed20_aux<=60410)  if hombre==0 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed21_1 = (employed20_aux<=85519)  if hombre==0 & rama_s ==2 & pea==1 // Industria
+			replace employed21_1 = (employed20_aux<=143799) if hombre==0 & rama_s ==3 & pea==1 // Comercio
+			replace employed21_1 = (employed20_aux<=451921) if hombre==0 & rama_s ==4 & pea==1 // Servicios			
+			
 			*2021 // EML 2021 publicada INEC 
 		
 		*hombres 
-				gen employed21_1 = (employed21_aux<=212002) if hombre==1 & rama_s ==1 & pea==1 // Agricultura	
-			replace employed21_1 = (employed21_aux<=226578) if hombre==1 & rama_s ==2 & pea==1 // Industria
-			replace employed21_1 = (employed21_aux<=169120) if hombre==1 & rama_s ==3 & pea==1 // Comercio
-			replace employed21_1 = (employed21_aux<=431385) if hombre==1 & rama_s ==4 & pea==1 // Servicios		
+				gen employed21_2 = (employed20_aux<=212002) if hombre==1 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed21_2 = (employed20_aux<=226578) if hombre==1 & rama_s ==2 & pea==1 // Industria
+			replace employed21_2 = (employed20_aux<=169120) if hombre==1 & rama_s ==3 & pea==1 // Comercio
+			replace employed21_2 = (employed20_aux<=431385) if hombre==1 & rama_s ==4 & pea==1 // Servicios		
 			
 		*mujeres 
-			replace employed21_1 = (employed21_aux<=61137)  if hombre==0 & rama_s ==1 & pea==1 // Agricultura	
-			replace employed21_1 = (employed21_aux<=67112)  if hombre==0 & rama_s ==2 & pea==1 // Industria
-			replace employed21_1 = (employed21_aux<=144248) if hombre==0 & rama_s ==3 & pea==1 // Comercio
-			replace employed21_1 = (employed21_aux<=432805) if hombre==0 & rama_s ==4 & pea==1 // Servicios
+			replace employed21_2 = (employed20_aux<=61137)  if hombre==0 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed21_2 = (employed20_aux<=67112)  if hombre==0 & rama_s ==2 & pea==1 // Industria
+			replace employed21_2 = (employed20_aux<=144248) if hombre==0 & rama_s ==3 & pea==1 // Comercio
+			replace employed21_2 = (employed20_aux<=432805) if hombre==0 & rama_s ==4 & pea==1 // Servicios
 			
+	
+	*2021 HFS 2021 * var GDP
+				*hombres 
+				gen employed22 = (employed20_aux<=(193617*1.03)) if hombre==1 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed22 = (employed20_aux<=(247444*1.074)) if hombre==1 & rama_s ==2 & pea==1 // Industria
+			replace employed22 = (employed20_aux<=(160791*1.037)) if hombre==1 & rama_s ==3 & pea==1 // Comercio
+			replace employed22 = (employed20_aux<=(456908*1.037)) if hombre==1 & rama_s ==4 & pea==1 // Servicios		
+			
+		*mujeres 
+			replace employed22 = (employed20_aux<=(60547*1.03))  if hombre==0 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed22 = (employed20_aux<=(86086*1.074))  if hombre==0 & rama_s ==2 & pea==1 // Industria
+			replace employed22 = (employed20_aux<=(144902*1.037)) if hombre==0 & rama_s ==3 & pea==1 // Comercio
+			replace employed22 = (employed20_aux<=(456928*1.037)) if hombre==0 & rama_s ==4 & pea==1 // Servicios
+	
 	
 			*2022 // projected using projections on GDP - macro inputs
 			
-		*hombres 
-				gen employed22 = (employed22_aux<=218362) if hombre==1 & rama_s ==1 & pea==1 // Agricultura	
-			replace employed22 = (employed22_aux<=243632) if hombre==1 & rama_s ==2 & pea==1 // Industria
-			replace employed22 = (employed22_aux<=180394) if hombre==1 & rama_s ==3 & pea==1 // Comercio
-			replace employed22 = (employed22_aux<=460143) if hombre==1 & rama_s ==4 & pea==1 // Servicios		
+				gen employed22_2 = (employed20_aux<=(212002*1.03)) if hombre==1 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed22_2 = (employed20_aux<=(226578*1.074)) if hombre==1 & rama_s ==2 & pea==1 // Industria
+			replace employed22_2 = (employed20_aux<=(169120*1.037)) if hombre==1 & rama_s ==3 & pea==1 // Comercio
+			replace employed22_2 = (employed20_aux<=(431385*1.037)) if hombre==1 & rama_s ==4 & pea==1 // Servicios		
 			
 		*mujeres 
-			replace employed22 = (employed22_aux<=62971)  if hombre==0 & rama_s ==1 & pea==1 // Agricultura	
-			replace employed22 = (employed22_aux<=72163)  if hombre==0 & rama_s ==2 & pea==1 // Industria
-			replace employed22 = (employed22_aux<=153864) if hombre==0 & rama_s ==3 & pea==1 // Comercio
-			replace employed22 = (employed22_aux<=461658) if hombre==0 & rama_s ==4 & pea==1 // Servicios
+			replace employed22_2 = (employed20_aux<=(61137*1.03))  if hombre==0 & rama_s ==1 & pea==1 // Agricultura	
+			replace employed22_2 = (employed20_aux<=(67112*1.074))  if hombre==0 & rama_s ==2 & pea==1 // Industria
+			replace employed22_2 = (employed20_aux<=(144248*1.037)) if hombre==0 & rama_s ==3 & pea==1 // Comercio
+			replace employed22_2 = (employed20_aux<=(432805*1.037)) if hombre==0 & rama_s ==4 & pea==1 // Servicios
 			
 *-----------------------2 Mitigation measures  ----------------------------------	
 * 2020
@@ -533,7 +594,7 @@ predict ocupa_Fx if pea ==1,  asif
 	
 	
 	* randomly exclude beneficiaries 
-	gen benef_excl_aux = pondera_20 if ben_pan_solid20 ==1
+	gen benef_excl_aux = pondera if ben_pan_solid20 ==1
 
 	set seed 1235 
     
@@ -588,8 +649,8 @@ predict ocupa_Fx if pea ==1,  asif
 	*drop  ben_pan_solid211 random_number_aux hh_empleado_gob hh_empleado_gob_ random_number hh_empleado_gob_out
 	
 	gen ben_pan_solid211 = ben_pan_solid20 
-	
-	replace ben_pan_solid211 = 0 if employed20_1==0 & employed21 ==1 & ben_pan_solid211 == 1 & urbano==1
+	replace ben_pan_solid211 = 0 if employed20_1==0 & employed21_1 ==1 & ben_pan_solid211 == 1 & urbano==1
+	*replace ben_pan_solid211 = 0 if employed20_1==0 & employed21 ==1 & ben_pan_solid211 == 1 & urbano==1  ERRROR
 	*replace ben_pan_solid211 =0 if ben_pan_solid211 == 1 & red_12065==1 & urbano==1 // Recibe Red Opor, 120 a los 65
 	
 	****************************************************************************
@@ -626,7 +687,7 @@ predict ocupa_Fx if pea ==1,  asif
 	
 * 2022
  
- 	di in red "PANAMA SOLIDARIO: HOGARES 2022-S1 condiciones luego de shock (P20221)"
+ 	di in red "PANAMA SOLIDARIO: HOGARES 2022-S1 condiciones luego de shock (P20221) Enero-marzo sin cambios "
 	
 		
 	*------5.4.2: generate variable 
@@ -640,13 +701,75 @@ predict ocupa_Fx if pea ==1,  asif
 	egen hh_ben_pan_solid221 = max(ben_pan_solid221), by(id) 
 	****************************************************************************
 
-	di in red "PANAMA SOLIDARIO: HOGARES 2022-S1 condiciones luego de shock (P20221)"	
+	di in red "PANAMA SOLIDARIO: HOGARES 2022-S1 condiciones luego de shock (P20221) con hogarizacion"	
 	
 	gen ben_pan_solid221_2 = ben_pan_solid221
 	replace ben_pan_solid221_2 = 0 if ben_pan_solid221 == 1 & red_12065==1 & urbano==1 // Recibe Red Opor, 120 a los 65
 	
 	egen hh_ben_pan_solid22_1 = max(ben_pan_solid221_2), by(id)
 	replace ben_pan_solid221_2 = 0 if hh_ben_pan_solid22_1==1 & jefe==0 & urbano==1
+	
+	
+	replace ben_pan_solid221_2 = 0 if ben_pan_solid221 == 1 & red_12065==1 & urbano==1 // Recibe Red Opor, 120 a los 65
+	
+	egen hh_ben_pan_solid22_2 = max(ben_pan_solid221_2), by(id)
+	replace ben_pan_solid221_2 = 0 if hh_ben_pan_solid22_1==1 & jefe==0 & urbano==1
+	
+	di in red "PANAMA SOLIDARIO: HOGARES 2022-S2 condiciones luego de shock (P20221) sin hogarizacion enero marzo con 30% menos urbano 460 mil vale digital"	
+	
+	gen ben_pan_solid221_3 = ben_pan_solid221
+	drop benef_excl_aux
+	gen benef_excl_aux = pondera if ben_pan_solid221_3 ==1
+	set seed 1236 
+    
+    * Assign random numbers to the observations and rank them from the smallest to the largest
+    drop random_excluded
+	gen random_excluded = uniform() if ben_pan_solid221_3 ==1  // [GENERATES A RANDOM NUMBER BETWEEN 0 AND 1] 
+	sort random_excluded
+	drop random_excluded_aux
+	gen random_excluded_aux = sum(benef_excl_aux) if vulnerable==0
+	
+		
+	*excluyo beneficiarios sobrantes 
+	* urbano
+	  drop randomly_excluded
+		 g randomly_excluded = random_excluded_aux <=150000 if urbano ==1 & vulnerable==0  
+	
+	replace ben_pan_solid221_3 = 0 if ben_pan_solid221_3 ==1 & randomly_excluded ==1
+	
+	egen hh_ben_pan_solid221_3 = max(ben_pan_solid221_3), by(id)
+	
+di in red "PANAMA SOLIDARIO: HOGARES 2022-S23 condiciones luego de shock (P20221) sin hogarizacion abril-junio con 10% menos AL MES PS"	
+	
+	forvalues m= 4/12{
+		local ma = `m'-1
+		local n  = `m'-3
+	gen ben_pan_solid221_`m' = ben_pan_solid221_`ma'
+	
+	drop benef_excl_aux
+	gen benef_excl_aux = pondera if ben_pan_solid221_`m' ==1
+	set seed 1236 
+    
+    * Assign random numbers to the observations and rank them from the smallest to the largest
+    cap drop random_excluded
+	gen random_excluded = uniform() if ben_pan_solid221_`m' ==1  // [GENERATES A RANDOM NUMBER BETWEEN 0 AND 1] 
+	sort random_excluded
+	drop random_excluded_aux
+	gen random_excluded_aux = sum(benef_excl_aux) if vulnerable==0
+	
+		
+	*excluyo beneficiarios sobrantes 
+	* urbano
+	 cap drop randomly_excluded
+		 g randomly_excluded = random_excluded_aux <=(45000) if vulnerable==0  & ben_pan_solid221_`m'==1
+	replace ben_pan_solid221_`m' = 0 if ben_pan_solid221_`m' ==1 & randomly_excluded ==1
+	
+	egen hh_ben_pan_solid221_`m' = max(ben_pan_solid221_`m'), by(id)
+	
+	}
+	
+	
+	
 	
 	
 	
@@ -662,15 +785,15 @@ predict ocupa_Fx if pea ==1,  asif
 		*Income in 2021 // loss of 18.6% in 2020 and gain of 17.9 2021 (private consumption variation) no minimum w var nor inflation 
 		gen double ila_100_21 = ila
 		replace ila_100_21 = 0 if shock_3 ==1 & employed21 == 0
-		replace ila_100_21 = ila*0.91 if shock_3 ==1 & employed21 == 1 & employed20_1 == 1 /*income losses for all others* that were unemployed before*/
-		replace ila_100_21 = ila*0.91 if shock_3 ==1 & employed21 == 1 & employed20_1 == 0 /*income losses for all others* that were never unemployed but shocked*/
+		replace ila_100_21 = ila*0.814 if shock_3 ==1 & employed21 == 1 & employed20_1 == 1 /*income losses for all others* that were unemployed before*/
+		replace ila_100_21 = ila*0.814 if shock_3 ==1 & employed21 == 1 & employed20_1 == 0 /*income losses for all others* that were never unemployed but shocked*/
 		
 		*Income in 2022 // private consuption variation 4.9 minimum weith rise in none shocked sectors 1.5
 		
 		gen double ila_100_22 = ila
 		replace ila_100_22 = 0 if shock_3 ==1 & employed22 == 0
-		replace ila_100_22 = ila*0.9541 if shock_3 ==1 & employed21 == 1 & employed22 == 1 /*income losses for all others* that were unemployed before*/
-		replace ila_100_22 = ila*0.9541 if shock_3 ==1 & employed21 == 0 & employed22 == 0 //income losses for all others* that were never unemployed but 
+		replace ila_100_22 = ila*0.853 if shock_3 ==1 & employed21 == 1 & employed22 == 1 /*income losses for all others* that were unemployed before*/
+		replace ila_100_22 = ila*0.853 if shock_3 ==1 & employed21 == 0 & employed22 == 0 //income losses for all others* that were never unemployed but 
 		replace ila_100_22 = ila*1.017 if shock_3 ==0 & employed22 == 1
 		
 
@@ -956,27 +1079,34 @@ predict ocupa_Fx if pea ==1,  asif
 }	// Close lost
 *tab rama_a hombre [w=pondera] if pea==1 & ocupado ==1 & edad>=15,m
 
-		*------5.2.2: ALTERNATIVE Assigment 4
+		
+
+		*------5.2.2: ALTERNATIVE Assigment 5 2022
 		// NOTE -> receive transfer if they meet the conditions in urban / and only if they are the HH head in Rural
 		 * just counting those who were excluded form the program for being beneficieries of other social programs
 		 * excluding beneficiaries who live with a public servent
 		 * excluding beneficiaries who beneficed from other public programs and who live with PS beneficieries  
 		
-		cap gen pan_solid_1_100_20_3 = 0
-		replace pan_solid_1_100_20_3 = 93    if ben_pan_solid20 ==1 & urbano ==1 
-		replace pan_solid_1_100_20_3 = 42.4  if hh_ben_pan_solid20_1 ==1 & (urbano ==0 | comarcas==1) & com == 1 //*Only 1 transfer in rural households  //precio de la bolsa marzo - agosto 15, septiembre - dic 25. dos bolsas al mes en areas rurales */ 
-		 
-		 
-		cap gen pan_solid_1_100_21_3 = 0
-		replace pan_solid_1_100_21_3 = 120   if ben_pan_solid212 ==1 & urbano ==1 
-		replace pan_solid_1_100_21_3 = 61.5  if hh_ben_pan_solid212 ==1 & (urbano ==0 | comarcas==1) & com == 1 //precio de la bolsa marzo - agosto 15, septiembre - dic 25. dos bolsas al mes en areas rurales 
+
+*2022	
+		forvalues m= 3/12{
+		local ma = `m'-1
+		local n  = `m'+1
+		cap gen pan_solid_1_100_22_`n' = 0
+		replace pan_solid_1_100_22_`n' = 120   if ben_pan_solid221_`m' ==1 
+		replace pan_solid_1_100_22_`n' = 74    if ben_pan_solid221_`m' ==1 & (urbano ==0 | comarcas==1) & com ==1 //precio de la bolsa marzo - agosto 15, septiembre - dic 25. dos bolsas al mes en areas rurales	
 	
-*2022			
-		cap gen pan_solid_1_100_22_3 = 0
-			replace pan_solid_1_100_22_3 = 120   if ben_pan_solid221_2 ==1 
-			replace pan_solid_1_100_22_3 = 74    if ben_pan_solid221_2 ==1 & (urbano ==0 | comarcas==1) & com ==1 //precio de la bolsa marzo - agosto 15, septiembre - dic 25. dos bolsas al mes en areas rurales	
-	
-	
+		}
+		
+		forvalues m= 1/3{
+		g pan_solid_1_100_22_4`m' = pan_solid_1_100_22_4
+		}
+* mean of transactions made during the year		
+		egen pan_solid_1_100_22_22 = rmean(pan_solid_1_100_22_41 pan_solid_1_100_22_42 pan_solid_1_100_22_43 pan_solid_1_100_22_5 pan_solid_1_100_22_6 pan_solid_1_100_22_7 pan_solid_1_100_22_8 pan_solid_1_100_22_9 pan_solid_1_100_22_10 pan_solid_1_100_22_11 pan_solid_1_100_22_12 pan_solid_1_100_22_13) 
+		
+		gen pan_solid_1_100_20_22 = .
+		gen pan_solid_1_100_21_22 = .
+		
 		local lost 100_20 100_21 100_22
 		foreach l of local lost {
 
@@ -985,42 +1115,44 @@ predict ocupa_Fx if pea ==1,  asif
 
 *-------	-5.1.1.1: INGRESOS INDIVIDUALES TOTALES
 			* Monetario
-			egen ii_PS1_1_`l'_3 = rsum( ila_`l' inla pan_solid_1_`l'_3), missing
+			egen ii_PS1_1_`l'_22 = rsum( ila_`l' inla pan_solid_1_`l'_22), missing
 			
 			
 			* Identifica perceptores de ingresos 
 				*totales 
-				gen       perii_PS1_1_`l'_3 = 0
-				replace   perii_PS1_1_`l'_3 = 1		if  ii_PS1_1_`l'_3 >0 & ii_PS1_1_`l'_3 !=.
+				gen       perii_PS1_1_`l'_22 = 0
+				replace   perii_PS1_1_`l'_22 = 1		if  ii_PS1_1_`l'_22 >0 & ii_PS1_1_`l'_22 !=.
 				* panama solidario
-				gen       perii_pan_solid_1_`l'_3 = 0
-				replace   perii_pan_solid_1_`l'_3 = 1		if  pan_solid_1_`l'_3 >0 & pan_solid_1_`l'_3 !=.
+				gen       perii_pan_solid_1_`l'_22 = 0
+				replace   perii_pan_solid_1_`l'_22 = 1		if  pan_solid_1_`l'_22 >0 & pan_solid_1_`l'_22 !=.
 		
 		
 *-------	-5.1.1.2: INGRESOS FAMILIARES TOTALES			
 			* Ingreso familiar total (antes de renta imputada)
-				egen itf_sin_ri_PS1_1_`l'_3 = sum(ii_PS1_1_`l'_3)	if  hogarsec==0, by(id)
+				egen itf_sin_ri_PS1_1_`l'_22 = sum(ii_PS1_1_`l'_22)	if  hogarsec==0, by(id)
 				
 			* ingreso familiar panama solidario
-				egen itf_pan_solid_1_`l'_3 = sum(pan_solid_1_`l'_3)	if  hogarsec==0, by(id)
+				egen itf_pan_solid_1_`l'_22 = sum(pan_solid_1_`l'_22)	if  hogarsec==0, by(id)
 			
 			
 			* Ingreso familiar total - total
-				egen    itf_PS1_1_`l'_3 = rsum(itf_sin_ri_PS1_1_`l'_3 renta_imp) 
-				replace itf_PS1_1_`l'_3 = .		if  itf_sin_ri_PS1_1_`l'_3 ==.
+				egen    itf_PS1_1_`l'_22 = rsum(itf_sin_ri_PS1_1_`l'_22 renta_imp) 
+				replace itf_PS1_1_`l'_22 = .		if  itf_sin_ri_PS1_1_`l'_22 ==.
 				
 				
 			* Ingreso familiar per capita 
-				gen ipcf_PS1_1_`l'_3    = itf_PS1_1_`l'_3        / miembros
+				gen ipcf_PS1_1_`l'_22    = itf_PS1_1_`l'_22        / miembros
 				
-				label var ipcf_PS1_1_`l'_3  "zonas rurales hogarizadas sin hogares de funcionarios - Lost:`l' "
+				label var ipcf_PS1_1_`l'_22  "zonas rurales hogarizadas sin hogares de funcionarios - Lost:`l' "
 				* panama solidario
-				gen ipcf_pan_solid_1_`l'_3    = itf_pan_solid_1_`l'_3      / miembros
+				gen ipcf_pan_solid_1_`l'_22    = itf_pan_solid_1_`l'_22      / miembros
+		
 				
 				
 }	// Close lost
 *tab rama_a hombre [w=pondera] if pea==1 & ocupado ==1 & edad>=15,m
+		
 
-
+save "${path}\covid\interdata\peb_202203_impact.dta", replace
 
 
