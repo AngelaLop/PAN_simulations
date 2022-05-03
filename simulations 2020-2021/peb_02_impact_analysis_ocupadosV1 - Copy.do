@@ -33,7 +33,7 @@ foreach l of local lost {
 	if "`l'"=="100_21" local ano_p = "21"
 	if "`l'"=="100_22" local ano_p = "22"
 	
-	local income  ipcf ipcf_`l' ipcf_PS20_`l' ipcf_PS1_1_`l'_1 ipcf_PS1_1_`l'_2 ipcf_PS1_1_`l'_22
+	local income  ipcf ipcf_`l' ipcf_PS20_`l' ipcf_PS1_1_`l'_1 ipcf_PS1_1_`l'_2 ipcf_PS1_1_`l'_22 ipcf_PS1_1_`l'_22_2
 	
 	foreach var in `income' {
 		noi di in red "Income: `var'"
@@ -49,7 +49,7 @@ foreach l of local lost {
 	
 	local days = 365/12		// Ave days in a month
 	*local pls 550 785
-	local pls 190 200 320 342 550 560 1300 1310 7000 7010
+	local pls 190 320 550 1300 7000 
 
 	
 	foreach pl of local pls {
@@ -61,7 +61,7 @@ foreach l of local lost {
 *----------5.3: Poverty impact 
 
 
-	local incomes  ipcf_ppp ipcf_ppp11_20_sin_covid ipcf_`l'_ppp ipcf_PS20_`l'_ppp ipcf_PS1_1_`l'_1_ppp  ipcf_PS1_1_`l'_2_ppp ipcf_PS1_1_`l'_22_ppp 		// <------------- 	INCOMES POVERTY CALCUL!
+	local incomes  ipcf_ppp ipcf_ppp11_20_sin_covid ipcf_`l'_ppp ipcf_PS20_`l'_ppp ipcf_PS1_1_`l'_1_ppp  ipcf_PS1_1_`l'_2_ppp ipcf_PS1_1_`l'_22_ppp ipcf_PS1_1_`l'_22_2_ppp		// <------------- 	INCOMES POVERTY CALCUL!
 	local bono = 0 
 	local caracteristicas total urbano_ rural_ 
 	*comarcas provincias indig Cocle Colon Chiriqui Darien Herrera Los_Santos Panama Veraguas Comarca_Kuna_Yala Comarca_Embera Comarca_Ngobe_Bugle Panama_Oeste Bocas_del_Toro 

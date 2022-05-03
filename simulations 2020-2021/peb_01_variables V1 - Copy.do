@@ -733,11 +733,13 @@ predict ocupa_Fx if pea ==1,  asif
 	*excluyo beneficiarios sobrantes 
 	* urbano
 	  drop randomly_excluded
-		 g randomly_excluded = random_excluded_aux <=150000 if urbano ==1 & vulnerable==0  
-	
+		 g randomly_excluded_3 = random_excluded_aux <=150000 if urbano ==1 
+		 g randomly_excluded = random_excluded_aux <=250000 if urbano ==1 
+	replace ben_pan_solid221 = 0 if ben_pan_solid221==1 & randomly_excluded_3 ==1
 	replace ben_pan_solid221_3 = 0 if ben_pan_solid221_3 ==1 & randomly_excluded ==1
-	
+		g ben_pan_solid221_3_2 = ben_pan_solid221_3
 	egen hh_ben_pan_solid221_3 = max(ben_pan_solid221_3), by(id)
+		g hh_ben_pan_solid221_3_2 = hh_ben_pan_solid221_3
 	
 di in red "PANAMA SOLIDARIO: HOGARES 2022-S23 condiciones luego de shock (P20221) sin hogarizacion abril-junio con 10% menos AL MES PS"	
 	
@@ -745,9 +747,12 @@ di in red "PANAMA SOLIDARIO: HOGARES 2022-S23 condiciones luego de shock (P20221
 		local ma = `m'-1
 		local n  = `m'-3
 	gen ben_pan_solid221_`m' = ben_pan_solid221_`ma'
+	gen ben_pan_solid221_`m'_2 = ben_pan_solid221_`ma'_2
 	
-	drop benef_excl_aux
+	cap drop benef_excl_aux
 	gen benef_excl_aux = pondera if ben_pan_solid221_`m' ==1
+	cap drop benef_excl_aux_2
+	gen benef_excl_aux_2 = pondera if ben_pan_solid221_`m'_2 ==1
 	set seed 1236 
     
     * Assign random numbers to the observations and rank them from the smallest to the largest
@@ -755,17 +760,22 @@ di in red "PANAMA SOLIDARIO: HOGARES 2022-S23 condiciones luego de shock (P20221
 	gen random_excluded = uniform() if ben_pan_solid221_`m' ==1  // [GENERATES A RANDOM NUMBER BETWEEN 0 AND 1] 
 	sort random_excluded
 	drop random_excluded_aux
+	cap drop random_excluded_aux_2
 	gen random_excluded_aux = sum(benef_excl_aux) if vulnerable==0
-	
+	gen random_excluded_aux_2 = sum(benef_excl_aux_2) if vulnerable==0 & urbano==1
 		
 	*excluyo beneficiarios sobrantes 
 	* urbano
 	 cap drop randomly_excluded
+	  cap drop randomly_excluded_2
 		 g randomly_excluded = random_excluded_aux <=(45000) if vulnerable==0  & ben_pan_solid221_`m'==1
+		 g randomly_excluded_2 = random_excluded_aux_2 <=(45000) if vulnerable==0 & ben_pan_solid221_`m'==1 & urbano==1
+	
 	replace ben_pan_solid221_`m' = 0 if ben_pan_solid221_`m' ==1 & randomly_excluded ==1
+	replace ben_pan_solid221_`m'_2 = 0 if ben_pan_solid221_`m'_2 ==1 & randomly_excluded_2 ==1 & urbano==1
 	
 	egen hh_ben_pan_solid221_`m' = max(ben_pan_solid221_`m'), by(id)
-	
+	egen hh_ben_pan_solid221_`m'_2 = max(ben_pan_solid221_`m'_2), by(id)
 	}
 	
 	
@@ -1097,15 +1107,33 @@ di in red "PANAMA SOLIDARIO: HOGARES 2022-S23 condiciones luego de shock (P20221
 		replace pan_solid_1_100_22_`n' = 74    if ben_pan_solid221_`m' ==1 & (urbano ==0 | comarcas==1) & com ==1 //precio de la bolsa marzo - agosto 15, septiembre - dic 25. dos bolsas al mes en areas rurales	
 	
 		}
+
 		
 		forvalues m= 1/3{
 		g pan_solid_1_100_22_4`m' = pan_solid_1_100_22_4
 		}
 * mean of transactions made during the year		
 		egen pan_solid_1_100_22_22 = rmean(pan_solid_1_100_22_41 pan_solid_1_100_22_42 pan_solid_1_100_22_43 pan_solid_1_100_22_5 pan_solid_1_100_22_6 pan_solid_1_100_22_7 pan_solid_1_100_22_8 pan_solid_1_100_22_9 pan_solid_1_100_22_10 pan_solid_1_100_22_11 pan_solid_1_100_22_12 pan_solid_1_100_22_13) 
+				
 		
-		gen pan_solid_1_100_20_22 = .
-		gen pan_solid_1_100_21_22 = .
+*2022_2	
+		forvalues m= 3/12{
+		local ma = `m'-1
+		local n  = `m'+1
+		cap gen pan_solid_1_100_22_`n'_2 = 0
+		replace pan_solid_1_100_22_`n'_2 = 120   if ben_pan_solid221_`m'_2 ==1 
+		replace pan_solid_1_100_22_`n'_2 = 74    if ben_pan_solid221_`m'_2 ==1 & (urbano ==0 | comarcas==1) & com ==1 //precio de la bolsa marzo - agosto 15, septiembre - dic 25. dos bolsas al mes en areas rurales	
+	
+		}		
+		
+		forvalues m= 1/3{
+		g pan_solid_1_100_22_4`m'_2 = pan_solid_1_100_22_4_2
+		}		
+
+* mean of transactions made during the year	second scenario
+		egen pan_solid_1_100_22_22_2 = rmean(pan_solid_1_100_22_41_2 pan_solid_1_100_22_42_2 pan_solid_1_100_22_43_2 pan_solid_1_100_22_5_2 pan_solid_1_100_22_6_2 pan_solid_1_100_22_7_2 pan_solid_1_100_22_8_2 pan_solid_1_100_22_9_2 pan_solid_1_100_22_10_2 pan_solid_1_100_22_11_2 pan_solid_1_100_22_12_2 pan_solid_1_100_22_13_2) 		
+		gen pan_solid_1_100_20_22_2 = .
+		gen pan_solid_1_100_21_22_2 = .
 		
 		local lost 100_20 100_21 100_22
 		foreach l of local lost {
@@ -1146,6 +1174,51 @@ di in red "PANAMA SOLIDARIO: HOGARES 2022-S23 condiciones luego de shock (P20221
 				label var ipcf_PS1_1_`l'_22  "zonas rurales hogarizadas sin hogares de funcionarios - Lost:`l' "
 				* panama solidario
 				gen ipcf_pan_solid_1_`l'_22    = itf_pan_solid_1_`l'_22      / miembros
+		
+				
+				
+}	// Close lost
+
+		
+		local lost 100_20 100_21 100_22
+		foreach l of local lost {
+
+*----------5.1.1: NEW ANNUAL INCOME + PAN Solidario
+
+
+*-------	-5.1.1.1: INGRESOS INDIVIDUALES TOTALES
+			* Monetario
+			egen ii_PS1_1_`l'_22_2 = rsum( ila_`l' inla pan_solid_1_`l'_22_2), missing
+			
+			
+			* Identifica perceptores de ingresos 
+				*totales 
+				gen       perii_PS1_1_`l'_22_2 = 0
+				replace   perii_PS1_1_`l'_22_2 = 1		if  ii_PS1_1_`l'_22_2 >0 & ii_PS1_1_`l'_22_2 !=.
+				* panama solidario
+				gen       perii_pan_solid_1_`l'_22_2 = 0
+				replace   perii_pan_solid_1_`l'_22_2 = 1		if  pan_solid_1_`l'_22_2 >0 & pan_solid_1_`l'_22_2 !=.
+		
+		
+*-------	-5.1.1.2: INGRESOS FAMILIARES TOTALES			
+			* Ingreso familiar total (antes de renta imputada)
+				egen itf_sin_ri_PS1_1_`l'_22_2 = sum(ii_PS1_1_`l'_22_2)	if  hogarsec==0, by(id)
+				
+			* ingreso familiar panama solidario
+				egen itf_pan_solid_1_`l'_22_2 = sum(pan_solid_1_`l'_22_2)	if  hogarsec==0, by(id)
+			
+			
+			* Ingreso familiar total - total
+				egen    itf_PS1_1_`l'_22_2 = rsum(itf_sin_ri_PS1_1_`l'_22_2 renta_imp) 
+				replace itf_PS1_1_`l'_22_2 = .		if  itf_sin_ri_PS1_1_`l'_22_2 ==.
+				
+				
+			* Ingreso familiar per capita 
+				gen ipcf_PS1_1_`l'_22_2    = itf_PS1_1_`l'_22_2        / miembros
+				
+				label var ipcf_PS1_1_`l'_22_2  "zonas rurales hogarizadas sin hogares de funcionarios - Lost:`l' "
+				* panama solidario
+				gen ipcf_pan_solid_1_`l'_22_2    = itf_pan_solid_1_`l'_22_2      / miembros
 		
 				
 				
